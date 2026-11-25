@@ -1,0 +1,1337 @@
+@page "/drive/files"
+@model MetaSearch.Pages.DriveFilesModel
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cloud Drive — domang.org</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@0.344.0/dist/umd/lucide.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+    <style>
+        /* 색: 메인·소개 페이지(project.css)와 같은 팔레트, 강조색은 Cloud Drive 초록
+           어두운 값이 기본이고 body.light 가 밝은 값 (사이트와 같은 localStorage 'theme' 를 따름) */
+        :root { --bg:#0f1012; --bg2:#17181b; --bg3:#26282d; --fg:#ecebe7; --fg2:#b4b6bb; --fg3:#8d9097; --accent:#63d47a; --accent2:#63d47a; --on-accent:#0f1012; }
+        * { font-family:"Pretendard Variable", Pretendard, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; box-sizing:border-box; }
+        body { background:var(--bg); color:var(--fg); margin:0; word-break:keep-all; -webkit-font-smoothing:antialiased; color-scheme:dark; }
+        /* 라이트 테마 */
+        body.light { --bg:#ffffff; --bg2:#ffffff; --bg3:#e7e5e0; --fg:#15161a; --fg2:#4c5058; --fg3:#6b7079; --accent:#2b7a3b; --accent2:#2b7a3b; --on-accent:#ffffff; }
+        body.light { background:var(--bg); color:var(--fg); color-scheme:light; }
+        ::selection { background:var(--accent); color:var(--on-accent); }
+
+        ::-webkit-scrollbar { width:6px; height:6px; }
+        ::-webkit-scrollbar-track { background:transparent; }
+        ::-webkit-scrollbar-thumb { background:var(--bg3); border-radius:3px; }
+
+        .drop-overlay { display:none; position:fixed; inset:0; z-index:9999; background:color-mix(in srgb,var(--accent) 12%,transparent); border:3px dashed var(--accent); pointer-events:none; }
+        .drop-overlay.active { display:flex; align-items:center; justify-content:center; }
+
+        .file-row { transition:background .1s; cursor:pointer; }
+        .file-row:hover { background:color-mix(in srgb,var(--accent) 6%,transparent); }
+        .file-row.selected { background:color-mix(in srgb,var(--accent) 12%,transparent); }
+        .file-row.drag-over { background:color-mix(in srgb,var(--accent) 20%,transparent); outline:2px solid var(--accent); outline-offset:-2px; border-radius:8px; }
+
+        .chk { appearance:none; width:18px; height:18px; border:2px solid var(--bg3); border-radius:5px; cursor:pointer; transition:all .15s; flex-shrink:0; position:relative; background:transparent; }
+        .chk:checked { background:var(--accent); border-color:var(--accent); }
+        .chk:checked::after { content:''; position:absolute; left:5px; top:1px; width:5px; height:10px; border:solid var(--on-accent); border-width:0 2px 2px 0; transform:rotate(45deg); }
+        .chk:hover { border-color:var(--accent2); }
+
+        .progress-bar { transition:width .3s ease; }
+
+        .ctx-menu { display:none; position:fixed; z-index:9998; background:var(--bg2); border:1px solid var(--bg3); border-radius:12px; box-shadow:0 20px 60px rgba(0,0,0,.5); padding:4px; min-width:200px; }
+        .ctx-menu.show { display:block; }
+        .ctx-item { display:flex; align-items:center; gap:8px; padding:8px 12px; border-radius:8px; cursor:pointer; font-size:13px; color:var(--fg2); transition:background .1s; }
+        .ctx-item:hover { background:var(--bg3); color:var(--fg); }
+        .ctx-item.danger { color:#f87171; }
+        .ctx-item.danger:hover { background:rgba(153,27,27,.2); }
+        .ctx-sep { height:1px; background:var(--bg3); margin:4px 8px; }
+
+        .modal-bg { display:none; position:fixed; inset:0; z-index:9990; background:rgba(0,0,0,.6); backdrop-filter:blur(4px); align-items:center; justify-content:center; }
+        .modal-bg.show { display:flex; }
+
+        .toast-wrap { position:fixed; bottom:24px; right:24px; z-index:9999; display:flex; flex-direction:column; gap:8px; }
+        .toast { padding:12px 20px; border-radius:12px; font-size:13px; background:var(--bg2); border:1px solid var(--bg3); color:var(--fg); box-shadow:0 8px 30px rgba(0,0,0,.4); animation:toastIn .3s ease; }
+        .toast.success { border-color:#10b981; }
+        .toast.error { border-color:#ef4444; }
+        @@keyframes toastIn { from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)} }
+
+        .sel-bar { transform:translateY(100%); transition:transform .2s ease; }
+        .sel-bar.show { transform:translateY(0); }
+
+        /* 사이드바 */
+        .nav-item { display:flex; align-items:center; gap:8px; padding:8px 12px; border-radius:10px; font-size:13px; color:var(--fg2); cursor:pointer; transition:all .15s; }
+        .nav-item:hover { background:color-mix(in srgb,var(--accent) 8%,transparent); color:var(--fg); }
+        .nav-item.active { background:color-mix(in srgb,var(--accent) 15%,transparent); color:var(--accent2); font-weight:600; }
+
+        /* 그리드 뷰 */
+        .grid-item { border-radius:12px; border:1px solid var(--bg3); background:var(--bg2); transition:all .15s; cursor:pointer; overflow:hidden; }
+        .grid-item:hover { border-color:var(--accent); transform:translateY(-1px); box-shadow:0 4px 16px rgba(0,0,0,.2); }
+        .grid-item.selected { border-color:var(--accent); background:color-mix(in srgb,var(--accent) 10%,transparent); }
+
+        /* 미리보기 */
+        .preview-bg { display:none; position:fixed; inset:0; z-index:9995; background:rgba(0,0,0,.85); backdrop-filter:blur(8px); align-items:center; justify-content:center; flex-direction:column; }
+        .preview-bg.show { display:flex; }
+
+        /* 상세 패널 */
+        .detail-panel { transform:translateX(100%); transition:transform .25s ease; }
+        .detail-panel.show { transform:translateX(0); }
+
+        /* 별표 */
+        .star-btn { color:var(--fg3); transition:color .15s; }
+        .star-btn:hover { color:#eab308; }
+        .star-btn.starred { color:#eab308; }
+
+        /* 검색 인풋 */
+        .search-input { background:var(--bg2); border:1px solid var(--bg3); }
+        .search-input:focus { border-color:var(--accent); outline:none; box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 20%,transparent); }
+    </style>
+    <!-- 구글 애드센스 (설정에 게시자 ID가 있을 때만, 제외 경로 제외) -->
+    <partial name="_AdHead" />
+</head>
+<body class="min-h-screen flex">
+
+<!-- 드래그 오버레이 -->
+<div id="dropOverlay" class="drop-overlay">
+    <div class="text-center">
+        <i data-lucide="upload-cloud" class="w-16 h-16 mx-auto mb-3" style="color:var(--accent2)"></i>
+        <p class="text-xl font-semibold" style="color:var(--accent2)">여기에 파일을 놓으세요</p>
+    </div>
+</div>
+
+<!-- ── 사이드바 ── -->
+<aside id="sidebar" class="w-56 shrink-0 border-r hidden lg:flex flex-col p-3 gap-1" style="background:var(--bg); border-color:var(--bg3)">
+    <a href="/drive/files" class="flex items-center gap-2.5 px-3 py-2 mb-3" onclick="goView('drive');return false;">
+        <div class="w-8 h-8 rounded-lg flex items-center justify-center" style="background:color-mix(in srgb,var(--accent) 20%,transparent); border:1px solid color-mix(in srgb,var(--accent) 30%,transparent)">
+            <i data-lucide="cloud" class="w-4 h-4" style="color:var(--accent2)"></i>
+        </div>
+        <span class="text-base font-bold" style="color:var(--fg); letter-spacing:-0.02em">Cloud Drive</span>
+    </a>
+    <div class="nav-item active" data-view="drive" onclick="goView('drive')">
+        <i data-lucide="hard-drive" class="w-4 h-4"></i><span>내 드라이브</span>
+    </div>
+    <div class="nav-item" data-view="starred" onclick="goView('starred')">
+        <i data-lucide="star" class="w-4 h-4"></i><span>즐겨찾기</span>
+    </div>
+    <div class="nav-item" data-view="recent" onclick="goView('recent')">
+        <i data-lucide="clock" class="w-4 h-4"></i><span>최근 파일</span>
+    </div>
+    <div class="nav-item" data-view="trash" onclick="goView('trash')">
+        <i data-lucide="trash-2" class="w-4 h-4"></i><span>휴지통</span>
+    </div>
+    <div class="flex-1"></div>
+    <!-- 사용량 -->
+    <div class="px-3 py-2">
+        <div class="flex items-center justify-between mb-1">
+            <span class="text-[10px] font-semibold uppercase tracking-wider" style="color:var(--fg3)">저장 공간</span>
+            <span id="usageText" class="text-[10px]" style="color:var(--fg3)"></span>
+        </div>
+        <div class="w-full rounded-full h-1.5 overflow-hidden" style="background:var(--bg3)">
+            <div id="usageBar" class="h-1.5 rounded-full transition-all" style="background:var(--accent); width:0%"></div>
+        </div>
+    </div>
+</aside>
+
+<!-- ── 메인 영역 ── -->
+<div class="flex-1 flex flex-col min-w-0">
+    <!-- 헤더 -->
+    <header class="sticky top-0 z-50 border-b flex items-center gap-2 px-4 h-14" style="background:var(--bg); border-color:var(--bg3)">
+        <!-- 모바일 메뉴 -->
+        <button onclick="toggleSidebar()" class="lg:hidden p-1.5 rounded-lg" style="color:var(--fg2)">
+            <i data-lucide="menu" class="w-5 h-5"></i>
+        </button>
+        <!-- 모바일 로고 -->
+        <div class="lg:hidden flex items-center gap-1.5">
+            <i data-lucide="cloud" class="w-4 h-4" style="color:var(--accent2)"></i>
+            <span class="text-sm font-bold">Cloud Drive</span>
+        </div>
+        <!-- 검색 -->
+        <div class="flex-1 max-w-lg mx-auto relative">
+            <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style="color:var(--fg3)"></i>
+            <input type="text" id="searchInput" placeholder="파일 검색..."
+                   class="search-input w-full rounded-xl pl-10 pr-4 py-2 text-sm" style="color:var(--fg)"
+                   oninput="onSearch(this.value)" />
+        </div>
+        <!-- 우측 액션 -->
+        <div class="flex items-center gap-1.5">
+            <!-- domang.org 홈으로 (메인·게임과 오갈 수 있게) -->
+            <a href="/" class="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-semibold transition" style="color:var(--fg2)" title="domang.org 홈">
+                <i data-lucide="home" class="w-4 h-4"></i><span class="hidden md:inline">domang.org</span>
+            </a>
+            <button onclick="toggleTheme()" class="p-1.5 rounded-lg transition" style="color:var(--fg3)" title="테마 전환">
+                <i data-lucide="sun" id="themeIcon" class="w-4 h-4"></i>
+            </button>
+            <div class="flex items-center gap-1 text-sm" style="color:var(--fg2)">
+                <i data-lucide="user" class="w-3.5 h-3.5"></i>
+                <span id="userName" class="hidden sm:inline"></span>
+                <a id="adminLink" href="/admin#drive" class="hidden text-xs px-2 py-1 rounded-lg border" style="border-color:var(--border,#e5e7eb)">회원 드라이브 관리</a>
+            </div>
+            <button onclick="logout()" class="p-1.5 rounded-lg transition" style="color:var(--fg3)" title="로그아웃">
+                <i data-lucide="log-out" class="w-4 h-4"></i>
+            </button>
+        </div>
+    </header>
+
+    <main class="flex-1 flex overflow-hidden">
+        <!-- 파일 영역 -->
+        <div class="flex-1 overflow-y-auto px-4 sm:px-6 py-3 pb-20" id="mainArea">
+            <!-- 툴바 -->
+            <div id="toolbar" class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                <nav id="breadcrumb" class="flex items-center gap-0.5 text-sm flex-wrap min-w-0"></nav>
+                <div class="flex items-center gap-2 shrink-0">
+                    <!-- 정렬 -->
+                    <select id="sortSelect" onchange="changeSort(this.value)" class="text-xs rounded-lg px-2 py-1.5 border" style="background:var(--bg2); border-color:var(--bg3); color:var(--fg)">
+                        <option value="name_asc">이름 ↑</option>
+                        <option value="name_desc">이름 ↓</option>
+                        <option value="date_desc" selected>최신순</option>
+                        <option value="date_asc">오래된순</option>
+                        <option value="size_desc">크기 큰순</option>
+                        <option value="size_asc">크기 작은순</option>
+                    </select>
+                    <!-- 뷰 전환 -->
+                    <div class="flex rounded-lg overflow-hidden border" style="border-color:var(--bg3)">
+                        <button onclick="setViewMode('list')" id="viewList" class="p-1.5 transition" style="background:var(--accent); color:var(--on-accent)" title="목록"><i data-lucide="list" class="w-3.5 h-3.5"></i></button>
+                        <button onclick="setViewMode('grid')" id="viewGrid" class="p-1.5 transition" style="background:var(--bg2); color:var(--fg3)" title="그리드"><i data-lucide="grid-3x3" class="w-3.5 h-3.5"></i></button>
+                    </div>
+                    <!-- 액션 버튼 (드라이브 뷰 전용) -->
+                    <div id="driveActions" class="flex items-center gap-2">
+                        <button onclick="showNewFolderModal()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition" style="background:var(--bg2); border-color:var(--bg3); color:var(--fg)">
+                            <i data-lucide="folder-plus" class="w-3.5 h-3.5" style="color:#fbbf24"></i>
+                            <span class="hidden sm:inline">새 폴더</span>
+                        </button>
+                        <button onclick="document.getElementById('folderInput').click()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition" style="background:var(--bg2); border-color:var(--bg3); color:var(--fg)">
+                            <i data-lucide="folder-up" class="w-3.5 h-3.5" style="color:var(--accent2)"></i>
+                            <span class="hidden sm:inline">폴더</span>
+                        </button>
+                        <button onclick="document.getElementById('fileInput').click()" class="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium transition" style="color:var(--on-accent);background:var(--accent)">
+                            <i data-lucide="upload" class="w-3.5 h-3.5"></i><span>업로드</span>
+                        </button>
+                        <input type="file" id="fileInput" multiple class="hidden" onchange="handleFileSelect(this.files)" />
+                        <input type="file" id="folderInput" webkitdirectory multiple class="hidden" onchange="handleFileSelect(this.files)" />
+                    </div>
+                    <!-- 휴지통 뷰 전용 -->
+                    <div id="trashActions" class="hidden">
+                        <button onclick="emptyTrash()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium text-red-400 transition" style="border-color:rgba(239,68,68,.3); background:rgba(239,68,68,.1)">
+                            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i><span>휴지통 비우기</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 업로드 패널 -->
+            <div id="uploadPanel" class="hidden mb-3 rounded-xl border p-3" style="background:var(--bg2); border-color:var(--bg3)">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-xs font-medium" style="color:var(--fg2)">업로드 중</span>
+                    <span id="uploadCount" class="text-xs" style="color:var(--fg3)"></span>
+                </div>
+                <!-- 전체 진행 바 -->
+                <div class="w-full rounded-full h-2 mb-1" style="background:var(--bg3)">
+                    <div id="uploadTotalBar" class="h-2 rounded-full transition-all" style="background:var(--accent);width:0%"></div>
+                </div>
+                <div class="flex items-center justify-between mb-2">
+                    <span id="uploadPercent" class="text-[10px] font-semibold" style="color:var(--accent)"></span>
+                    <span id="uploadEta" class="text-[10px]" style="color:var(--fg3)"></span>
+                </div>
+                <div id="uploadList" class="space-y-2 max-h-60 overflow-y-auto scroll-smooth"></div>
+            </div>
+
+            <!-- 리스트 뷰 -->
+            <div id="listView" class="rounded-xl border overflow-hidden" style="background:var(--bg2); border-color:var(--bg3)">
+                <div class="grid grid-cols-12 gap-2 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider border-b items-center" style="color:var(--fg3); border-color:var(--bg3)">
+                    <div class="col-span-6 sm:col-span-5 flex items-center gap-2">
+                        <input type="checkbox" id="selectAll" class="chk" onchange="toggleSelectAll(this.checked)" />
+                        <span class="cursor-pointer" onclick="toggleSortByName()">이름</span>
+                    </div>
+                    <div class="col-span-3 hidden sm:block cursor-pointer" onclick="toggleSortByDate()">수정일</div>
+                    <div class="col-span-3 sm:col-span-2 text-right cursor-pointer" onclick="toggleSortBySize()">크기</div>
+                    <div class="col-span-3 sm:col-span-2 text-right">작업</div>
+                </div>
+                <div id="fileBody"></div>
+            </div>
+
+            <!-- 그리드 뷰 -->
+            <div id="gridView" class="hidden grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3"></div>
+
+            <!-- 빈 폴더 -->
+            <div id="emptyState" class="hidden py-16 text-center">
+                <i data-lucide="folder-open" class="w-14 h-14 mx-auto mb-3" style="color:var(--bg3)"></i>
+                <p style="color:var(--fg3)">비어있는 폴더</p>
+                <p class="text-xs mt-1" style="color:var(--fg3)">파일을 드래그하거나 업로드 버튼을 눌러주세요</p>
+            </div>
+        </div>
+
+        <!-- 상세 패널 -->
+        <div id="detailPanel" class="detail-panel w-72 border-l shrink-0 overflow-y-auto" style="background:var(--bg); border-color:var(--bg3)">
+            <div class="p-4">
+                <div class="flex items-center justify-between mb-4">
+                    <span class="text-sm font-semibold">상세 정보</span>
+                    <button onclick="closeDetail()" class="p-1 rounded-lg" style="color:var(--fg3)"><i data-lucide="x" class="w-4 h-4"></i></button>
+                </div>
+                <div id="detailContent"></div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<!-- ── 선택 바 ── -->
+<div id="selBar" class="sel-bar fixed bottom-0 inset-x-0 z-40 border-t px-4 py-3" style="background:var(--bg2); border-color:color-mix(in srgb,var(--accent) 30%,transparent)">
+    <div class="max-w-7xl mx-auto flex items-center justify-between">
+        <div class="flex items-center gap-3">
+            <button onclick="clearSelection()" class="p-1.5 rounded-lg transition" style="color:var(--fg3)"><i data-lucide="x" class="w-4 h-4"></i></button>
+            <span id="selCount" class="text-sm font-medium" style="color:var(--accent2)"></span>
+        </div>
+        <div class="flex items-center gap-2">
+            <button onclick="bulkDownload()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition" style="background:var(--bg3); color:var(--fg2)">
+                <i data-lucide="download" class="w-3.5 h-3.5"></i><span class="hidden sm:inline">다운로드</span>
+            </button>
+            <button onclick="bulkMove()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition" style="background:var(--bg3); color:var(--fg2)">
+                <i data-lucide="folder-input" class="w-3.5 h-3.5"></i><span class="hidden sm:inline">이동</span>
+            </button>
+            <button onclick="bulkDelete()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium text-red-400 transition" style="background:rgba(127,29,29,.2); border-color:rgba(239,68,68,.2)">
+                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i><span class="hidden sm:inline">삭제</span>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- 컨텍스트 메뉴 -->
+<div id="ctxMenu" class="ctx-menu">
+    <div class="ctx-item" onclick="ctxPreview()"><i data-lucide="eye" class="w-4 h-4"></i>미리보기</div>
+    <div class="ctx-item" onclick="ctxDownload()"><i data-lucide="download" class="w-4 h-4"></i>다운로드</div>
+    <div class="ctx-sep"></div>
+    <div class="ctx-item" onclick="ctxStar()"><i data-lucide="star" class="w-4 h-4"></i><span id="ctxStarLabel">즐겨찾기</span></div>
+    <div class="ctx-item" onclick="ctxCopy()"><i data-lucide="copy" class="w-4 h-4"></i>복사</div>
+    <div class="ctx-item" onclick="ctxRename()"><i data-lucide="pencil" class="w-4 h-4"></i>이름 변경</div>
+    <div class="ctx-item" onclick="ctxMove()"><i data-lucide="folder-input" class="w-4 h-4"></i>이동</div>
+    <div class="ctx-item" onclick="ctxDetail()"><i data-lucide="info" class="w-4 h-4"></i>상세 정보</div>
+    <div class="ctx-sep"></div>
+    <div class="ctx-item danger" onclick="ctxDelete()"><i data-lucide="trash-2" class="w-4 h-4"></i>삭제</div>
+</div>
+
+<!-- 휴지통 컨텍스트 메뉴 -->
+<div id="trashCtxMenu" class="ctx-menu">
+    <div class="ctx-item" onclick="ctxRestore()"><i data-lucide="rotate-ccw" class="w-4 h-4"></i>복원</div>
+    <div class="ctx-item danger" onclick="ctxPermDelete()"><i data-lucide="trash-2" class="w-4 h-4"></i>영구 삭제</div>
+</div>
+
+<!-- 새 폴더 모달 -->
+<div id="folderModal" class="modal-bg">
+    <div class="rounded-2xl border p-5 w-full max-w-sm mx-4 shadow-2xl" style="background:var(--bg2); border-color:var(--bg3)">
+        <h3 class="text-base font-semibold mb-3">새 폴더</h3>
+        <input type="text" id="folderNameInput" placeholder="폴더 이름"
+               class="search-input w-full rounded-xl px-4 py-2.5 text-sm" style="color:var(--fg)" />
+        <div class="flex gap-2 mt-4">
+            <button onclick="closeFolderModal()" class="flex-1 py-2 rounded-xl text-sm transition" style="background:var(--bg3); color:var(--fg2)">취소</button>
+            <button onclick="createFolder()" class="flex-1 py-2 rounded-xl text-sm font-medium transition" style="background:var(--accent); color:var(--on-accent)">만들기</button>
+        </div>
+    </div>
+</div>
+
+<!-- 이름 변경 모달 -->
+<div id="renameModal" class="modal-bg">
+    <div class="rounded-2xl border p-5 w-full max-w-sm mx-4 shadow-2xl" style="background:var(--bg2); border-color:var(--bg3)">
+        <h3 class="text-base font-semibold mb-3">이름 변경</h3>
+        <input type="text" id="renameInput" placeholder="새 이름"
+               class="search-input w-full rounded-xl px-4 py-2.5 text-sm" style="color:var(--fg)" />
+        <div class="flex gap-2 mt-4">
+            <button onclick="closeRenameModal()" class="flex-1 py-2 rounded-xl text-sm transition" style="background:var(--bg3); color:var(--fg2)">취소</button>
+            <button onclick="doRename()" class="flex-1 py-2 rounded-xl text-sm font-medium transition" style="background:var(--accent); color:var(--on-accent)">변경</button>
+        </div>
+    </div>
+</div>
+
+<!-- 이동 모달 -->
+<div id="moveModal" class="modal-bg">
+    <div class="rounded-2xl border p-5 w-full max-w-sm mx-4 shadow-2xl" style="background:var(--bg2); border-color:var(--bg3)">
+        <h3 class="text-base font-semibold mb-3">이동할 폴더 선택</h3>
+        <div id="moveFolderList" class="space-y-1 max-h-60 overflow-y-auto mb-4"></div>
+        <div class="flex gap-2">
+            <button onclick="closeMoveModal()" class="flex-1 py-2 rounded-xl text-sm transition" style="background:var(--bg3); color:var(--fg2)">취소</button>
+            <button onclick="doMove()" class="flex-1 py-2 rounded-xl text-sm font-medium transition" style="background:var(--accent); color:var(--on-accent)">이동</button>
+        </div>
+    </div>
+</div>
+
+<!-- 미리보기 모달 -->
+<div id="previewModal" class="preview-bg" onclick="if(event.target===this)closePreview()">
+    <div class="absolute top-4 right-4 flex gap-2 z-10">
+        <button onclick="previewDownload()" class="p-2 rounded-xl" style="background:rgba(0,0,0,.5); color:white" title="다운로드"><i data-lucide="download" class="w-5 h-5"></i></button>
+        <button onclick="closePreview()" class="p-2 rounded-xl" style="background:rgba(0,0,0,.5); color:white" title="닫기"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <div id="previewContent" class="max-w-5xl max-h-[85vh] overflow-auto w-full px-4"></div>
+    <div id="previewName" class="absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-xl text-sm" style="background:rgba(0,0,0,.6); color:white"></div>
+</div>
+
+<!-- 중복 파일 처리 모달 -->
+<div id="dupModal" class="modal-bg">
+    <div class="rounded-2xl border p-5 w-full max-w-sm mx-4 shadow-2xl" style="background:var(--bg2); border-color:var(--bg3)">
+        <h3 class="text-base font-semibold mb-2">파일이 이미 존재합니다</h3>
+        <p id="dupFileName" class="text-sm mb-1 break-all" style="color:var(--fg2)"></p>
+        <p class="text-xs mb-4" style="color:var(--fg3)">같은 이름의 파일이 이미 있습니다. 어떻게 할까요?</p>
+        <div class="flex flex-col gap-2">
+            <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" id="dupApplyAll" class="chk" />
+                <span class="text-xs" style="color:var(--fg2)">나머지 파일에도 동일하게 적용</span>
+            </label>
+        </div>
+        <div class="flex gap-2 mt-4">
+            <button onclick="dupResolve('skip')" class="flex-1 py-2 rounded-xl text-xs transition" style="background:var(--bg3); color:var(--fg2)">건너뛰기</button>
+            <button onclick="dupResolve('rename')" class="flex-1 py-2 rounded-xl text-xs font-medium transition" style="background:var(--accent); color:var(--on-accent)">이름 변경</button>
+            <button onclick="dupResolve('overwrite')" class="flex-1 py-2 rounded-xl text-xs font-medium transition" style="background:#dc2626; color:white">덮어쓰기</button>
+        </div>
+    </div>
+</div>
+
+<!-- 모바일 사이드바 오버레이 -->
+<div id="sidebarOverlay" class="fixed inset-0 z-40 bg-black/50 hidden lg:hidden" onclick="toggleSidebar()"></div>
+
+<!-- 토스트 -->
+<div id="toasts" class="toast-wrap"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// 전역 상태
+// ═══════════════════════════════════════════════════════════
+const TOKEN = localStorage.getItem('driveToken');
+if (!TOKEN) location.href = '/drive';
+const AUTH = { 'Authorization': 'Bearer ' + TOKEN };
+
+let currentView = 'drive';       // drive | starred | recent | trash | search
+let currentFolder = null;
+let currentFiles = [];
+let selectedIds = new Set();
+let ctxTarget = null;
+let dragItemId = null;
+let lastClickIdx = -1;
+let moveTargetId = undefined;
+let moveItemIds = [];
+let viewMode = localStorage.getItem('viewMode') || 'list';
+let sortBy = localStorage.getItem('sortBy') || 'date_desc';
+let previewFile = null;
+let detailFile = null;
+let searchTimeout = null;
+let dupResolveCallback = null;     // 중복 파일 처리 콜백
+let dupApplyAllMode = null;        // '모두 적용' 모드 저장
+
+lucide.createIcons();
+
+// 테마 초기화
+// 저장값이 없으면 기기 설정(prefers-color-scheme)을 따름 — 메인 등 다른 페이지와 같은 규칙
+{ const t = localStorage.getItem('theme'); if (t === 'light' || (t !== 'dark' && !matchMedia('(prefers-color-scheme: dark)').matches)) document.body.classList.add('light'); }
+updateThemeIcon();
+
+// 뷰 모드 초기화
+if (viewMode === 'grid') setViewMode('grid', true);
+document.getElementById('sortSelect').value = sortBy;
+
+// ═══════════════════════════════════════════════════════════
+// 초기화
+// ═══════════════════════════════════════════════════════════
+(async function init() {
+    const res = await fetch('/api/drive/me', { headers: AUTH });
+    if (!res.ok) { localStorage.removeItem('driveToken'); location.href = '/drive'; return; }
+    const me = await res.json();
+    document.getElementById('userName').textContent = me.username;
+    if (me.isAdmin) document.getElementById('adminLink').classList.remove('hidden');   // 사이트 관리자만
+    await loadView();
+    await loadUsage();
+})();
+
+// ═══════════════════════════════════════════════════════════
+// 뷰 전환 (내 드라이브, 즐겨찾기, 최근, 휴지통, 검색)
+// ═══════════════════════════════════════════════════════════
+function goView(view) {
+    currentView = view;
+    currentFolder = null;
+    selectedIds.clear();
+    updateSelBar();
+    // 네비게이션 활성화
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.view === view));
+    // 액션 버튼 토글
+    document.getElementById('driveActions').classList.toggle('hidden', view !== 'drive');
+    document.getElementById('trashActions').classList.toggle('hidden', view !== 'trash');
+    loadView();
+    // 모바일 사이드바 닫기
+    if (window.innerWidth < 1024) toggleSidebar();
+}
+
+async function loadView() {
+    let url, data;
+    switch (currentView) {
+        case 'drive':
+            url = '/api/drive/list' + (currentFolder ? '?parentId=' + currentFolder : '');
+            data = await fetchJson(url);
+            currentFiles = data.files;
+            renderBreadcrumb(data.breadcrumb);
+            break;
+        case 'starred':
+            data = await fetchJson('/api/drive/starred');
+            currentFiles = data.files;
+            renderBreadcrumb(null, '즐겨찾기');
+            break;
+        case 'recent':
+            data = await fetchJson('/api/drive/recent');
+            currentFiles = data.files;
+            renderBreadcrumb(null, '최근 파일');
+            break;
+        case 'trash':
+            data = await fetchJson('/api/drive/trash');
+            currentFiles = data.files;
+            renderBreadcrumb(null, '휴지통');
+            break;
+        case 'search':
+            break; // 검색은 별도 처리
+    }
+    selectedIds.clear();
+    lastClickIdx = -1;
+    updateSelBar();
+    sortAndRender();
+}
+
+async function fetchJson(url) {
+    try {
+        const res = await fetch(url, { headers: AUTH });
+        if (!res.ok) {
+            // 서버 에러 상세 로깅 — 디버깅용
+            const errText = await res.text().catch(() => '');
+            console.error('[DriveAPI]', res.status, url, errText.slice(0, 300));
+            return { files: [], breadcrumb: [] };
+        }
+        return await res.json();
+    } catch(e) {
+        console.error('[DriveAPI] fetch 실패:', url, e);
+        return { files: [], breadcrumb: [] };
+    }
+}
+
+// ═══════════════════════════════════════════════════════════
+// 검색
+// ═══════════════════════════════════════════════════════════
+function onSearch(q) {
+    clearTimeout(searchTimeout);
+    if (!q.trim()) { if (currentView === 'search') goView('drive'); return; }
+    searchTimeout = setTimeout(async () => {
+        currentView = 'search';
+        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+        document.getElementById('driveActions').classList.add('hidden');
+        document.getElementById('trashActions').classList.add('hidden');
+        const data = await fetchJson('/api/drive/search?q=' + encodeURIComponent(q.trim()));
+        currentFiles = data.files;
+        renderBreadcrumb(null, '"' + q.trim() + '" 검색 결과');
+        sortAndRender();
+    }, 300);
+}
+
+// ═══════════════════════════════════════════════════════════
+// 정렬
+// ═══════════════════════════════════════════════════════════
+function changeSort(val) { sortBy = val; localStorage.setItem('sortBy', val); sortAndRender(); }
+function toggleSortByName() { changeSort(sortBy === 'name_asc' ? 'name_desc' : 'name_asc'); document.getElementById('sortSelect').value = sortBy; }
+function toggleSortByDate() { changeSort(sortBy === 'date_desc' ? 'date_asc' : 'date_desc'); document.getElementById('sortSelect').value = sortBy; }
+function toggleSortBySize() { changeSort(sortBy === 'size_desc' ? 'size_asc' : 'size_desc'); document.getElementById('sortSelect').value = sortBy; }
+
+function sortAndRender() {
+    // 폴더를 항상 상단에 유지
+    const folders = currentFiles.filter(f => f.isFolder);
+    const files = currentFiles.filter(f => !f.isFolder);
+    const sorter = (a, b) => {
+        switch (sortBy) {
+            case 'name_asc': return a.fileName.localeCompare(b.fileName);
+            case 'name_desc': return b.fileName.localeCompare(a.fileName);
+            case 'date_desc': return new Date(b.updatedAt) - new Date(a.updatedAt);
+            case 'date_asc': return new Date(a.updatedAt) - new Date(b.updatedAt);
+            case 'size_desc': return (b.fileSize||0) - (a.fileSize||0);
+            case 'size_asc': return (a.fileSize||0) - (b.fileSize||0);
+            default: return 0;
+        }
+    };
+    folders.sort(sorter);
+    files.sort(sorter);
+    currentFiles = [...folders, ...files];
+    renderFiles();
+}
+
+// ═══════════════════════════════════════════════════════════
+// 렌더링
+// ═══════════════════════════════════════════════════════════
+function renderFiles() {
+    const body = document.getElementById('fileBody');
+    const grid = document.getElementById('gridView');
+    const empty = document.getElementById('emptyState');
+    const listV = document.getElementById('listView');
+
+    if (!currentFiles.length) {
+        body.innerHTML = ''; grid.innerHTML = '';
+        empty.classList.remove('hidden'); listV.classList.add('hidden'); grid.classList.add('hidden');
+        return;
+    }
+    empty.classList.add('hidden');
+
+    if (viewMode === 'list') {
+        listV.classList.remove('hidden'); grid.classList.add('hidden');
+        body.innerHTML = currentFiles.map((f, idx) => renderListRow(f, idx)).join('');
+    } else {
+        listV.classList.add('hidden'); grid.classList.remove('hidden');
+        grid.innerHTML = currentFiles.map((f, idx) => renderGridItem(f, idx)).join('');
+    }
+    lucide.createIcons();
+    document.getElementById('selectAll').checked = false;
+}
+
+function renderListRow(f, idx) {
+    const icon = f.isFolder ? 'folder' : getFileIcon(f.fileName);
+    const clr = f.isFolder ? 'color:#fbbf24' : getFileIconColor(f.fileName);
+    const size = f.isFolder ? '—' : formatSize(f.fileSize);
+    const date = formatDate(f.updatedAt);
+    const sel = selectedIds.has(f.id) ? 'selected' : '';
+    const chk = selectedIds.has(f.id) ? 'checked' : '';
+    const starred = f.isStarred ? 'starred' : '';
+    const dropAttr = f.isFolder ? 'ondragover="fileDragOver(event)" ondragleave="fileDragLeave(event)" ondrop="fileDrop(event,'+f.id+')"' : '';
+    const ctxHandler = currentView === 'trash' ? 'showTrashCtx(event,'+f.id+')' : 'showCtxMenu(event,'+f.id+')';
+
+    return `<div class="file-row grid grid-cols-12 gap-2 px-3 py-2 items-center select-none ${sel}"
+                 data-id="${f.id}" data-idx="${idx}" draggable="true"
+                 ondragstart="fileDragStart(event,${f.id})"
+                 onclick="rowClick(event,${f.id},${idx})"
+                 ondblclick="rowDblClick(${f.id},${f.isFolder},'${esc(f.fileName)}')"
+                 oncontextmenu="${ctxHandler}" ${dropAttr}>
+        <div class="col-span-6 sm:col-span-5 flex items-center gap-2.5 min-w-0">
+            <input type="checkbox" class="chk" ${chk} onclick="event.stopPropagation();toggleSelect(${f.id},${idx})" />
+            <i data-lucide="${icon}" class="w-5 h-5 shrink-0" style="${clr}"></i>
+            <span class="truncate text-sm">${escapeHtml(f.fileName)}</span>
+            <button onclick="event.stopPropagation();toggleStar(${f.id})" class="star-btn ${starred} shrink-0 ml-auto sm:ml-0" title="즐겨찾기">
+                <i data-lucide="star" class="w-3.5 h-3.5" ${f.isStarred?'style="fill:#eab308"':''}></i>
+            </button>
+        </div>
+        <div class="col-span-3 hidden sm:block text-xs" style="color:var(--fg3)">${date}</div>
+        <div class="col-span-3 sm:col-span-2 text-right text-xs" style="color:var(--fg3)">${size}</div>
+        <div class="col-span-3 sm:col-span-2 flex justify-end gap-0.5">
+            ${!f.isFolder && currentView !== 'trash' ? `<button onclick="event.stopPropagation();openPreview(${f.id})" class="p-1.5 rounded-lg transition" style="color:var(--fg3)" title="미리보기"><i data-lucide="eye" class="w-3.5 h-3.5"></i></button>` : ''}
+            <button onclick="event.stopPropagation();${ctxHandler}" class="p-1.5 rounded-lg transition" style="color:var(--fg3)" title="더보기"><i data-lucide="more-vertical" class="w-3.5 h-3.5"></i></button>
+        </div>
+    </div>`;
+}
+
+function renderGridItem(f, idx) {
+    const icon = f.isFolder ? 'folder' : getFileIcon(f.fileName);
+    const clr = f.isFolder ? 'color:#fbbf24' : getFileIconColor(f.fileName);
+    const sel = selectedIds.has(f.id) ? 'selected' : '';
+    const isImg = isImageFile(f.fileName);
+    const thumbUrl = isImg ? `/api/drive/download/${f.id}?token=${TOKEN}&inline=1` : '';
+
+    return `<div class="grid-item ${sel}" data-id="${f.id}" data-idx="${idx}"
+                 onclick="rowClick(event,${f.id},${idx})"
+                 ondblclick="rowDblClick(${f.id},${f.isFolder},'${esc(f.fileName)}')"
+                 oncontextmenu="${currentView==='trash'?'showTrashCtx':'showCtxMenu'}(event,${f.id})"
+                 draggable="true" ondragstart="fileDragStart(event,${f.id})"
+                 ${f.isFolder?'ondragover="fileDragOver(event)" ondragleave="fileDragLeave(event)" ondrop="fileDrop(event,'+f.id+')"':''}>
+        <div class="aspect-square flex items-center justify-center relative" style="background:var(--bg)">
+            ${isImg ? `<img src="${thumbUrl}" class="w-full h-full object-cover" loading="lazy" />` :
+              `<i data-lucide="${icon}" class="w-10 h-10" style="${clr}"></i>`}
+            <input type="checkbox" class="chk absolute top-2 left-2" ${selectedIds.has(f.id)?'checked':''} onclick="event.stopPropagation();toggleSelect(${f.id},${idx})" />
+            ${f.isStarred ? '<i data-lucide="star" class="w-3 h-3 absolute top-2 right-2" style="color:#eab308;fill:#eab308"></i>' : ''}
+        </div>
+        <div class="p-2">
+            <div class="text-xs truncate">${escapeHtml(f.fileName)}</div>
+            <div class="text-[10px] mt-0.5" style="color:var(--fg3)">${f.isFolder ? '폴더' : formatSize(f.fileSize)}</div>
+        </div>
+    </div>`;
+}
+
+function renderBreadcrumb(crumbs, title) {
+    const nav = document.getElementById('breadcrumb');
+    if (title) {
+        nav.innerHTML = `<span class="flex items-center gap-1 px-2 py-1 text-sm font-semibold"><i data-lucide="${currentView==='starred'?'star':currentView==='recent'?'clock':currentView==='trash'?'trash-2':'search'}" class="w-3.5 h-3.5"></i>${escapeHtml(title)}</span>`;
+        lucide.createIcons();
+        return;
+    }
+    let h = `<button onclick="navigate(null)" class="flex items-center gap-1 px-2 py-1 rounded-lg transition text-sm" style="color:var(--fg2)">
+        <i data-lucide="hard-drive" class="w-3.5 h-3.5"></i><span>내 드라이브</span></button>`;
+    if (crumbs && crumbs.length) {
+        crumbs.forEach(c => {
+            h += `<i data-lucide="chevron-right" class="w-3.5 h-3.5 shrink-0" style="color:var(--fg3)"></i>`;
+            h += `<button onclick="navigate(${c.id})" class="px-2 py-1 rounded-lg transition text-sm truncate max-w-[140px]" style="color:var(--fg2)">${escapeHtml(c.name)}</button>`;
+        });
+    }
+    nav.innerHTML = h;
+    lucide.createIcons();
+}
+
+// ═══════════════════════════════════════════════════════════
+// 뷰 모드 전환
+// ═══════════════════════════════════════════════════════════
+function setViewMode(mode, init) {
+    viewMode = mode;
+    localStorage.setItem('viewMode', mode);
+    const lBtn = document.getElementById('viewList'), gBtn = document.getElementById('viewGrid');
+    if (mode === 'list') {
+        lBtn.style.background = 'var(--accent)'; lBtn.style.color = 'var(--on-accent)';
+        gBtn.style.background = 'var(--bg2)'; gBtn.style.color = 'var(--fg3)';
+    } else {
+        gBtn.style.background = 'var(--accent)'; gBtn.style.color = 'var(--on-accent)';
+        lBtn.style.background = 'var(--bg2)'; lBtn.style.color = 'var(--fg3)';
+    }
+    if (!init) renderFiles();
+}
+
+// ═══════════════════════════════════════════════════════════
+// 테마 전환
+// ═══════════════════════════════════════════════════════════
+function toggleTheme() {
+    document.body.classList.toggle('light');
+    const isLight = document.body.classList.contains('light');
+    localStorage.setItem('theme', isLight ? 'light' : 'dark');
+    updateThemeIcon();
+}
+function updateThemeIcon() {
+    const isLight = document.body.classList.contains('light');
+    document.getElementById('themeIcon').setAttribute('data-lucide', isLight ? 'moon' : 'sun');
+    lucide.createIcons();
+}
+
+// ═══════════════════════════════════════════════════════════
+// 선택
+// ═══════════════════════════════════════════════════════════
+function rowClick(e, id, idx) {
+    if (e.target.classList.contains('chk')) return;
+    if (e.shiftKey && lastClickIdx >= 0) {
+        const from = Math.min(lastClickIdx, idx), to = Math.max(lastClickIdx, idx);
+        for (let i = from; i <= to; i++) selectedIds.add(currentFiles[i].id);
+    } else if (e.ctrlKey || e.metaKey) {
+        selectedIds.has(id) ? selectedIds.delete(id) : selectedIds.add(id);
+    } else {
+        return;
+    }
+    lastClickIdx = idx;
+    refreshSelectionUI();
+}
+
+function toggleSelect(id, idx) {
+    selectedIds.has(id) ? selectedIds.delete(id) : selectedIds.add(id);
+    lastClickIdx = idx;
+    refreshSelectionUI();
+}
+
+function toggleSelectAll(checked) {
+    if (checked) currentFiles.forEach(f => selectedIds.add(f.id));
+    else selectedIds.clear();
+    refreshSelectionUI();
+}
+
+function clearSelection() { selectedIds.clear(); refreshSelectionUI(); }
+
+function refreshSelectionUI() {
+    document.querySelectorAll('.file-row, .grid-item').forEach(el => {
+        const id = parseInt(el.dataset.id);
+        const chk = el.querySelector('.chk');
+        if (selectedIds.has(id)) { el.classList.add('selected'); if(chk)chk.checked=true; }
+        else { el.classList.remove('selected'); if(chk)chk.checked=false; }
+    });
+    document.getElementById('selectAll').checked = selectedIds.size > 0 && selectedIds.size === currentFiles.length;
+    updateSelBar();
+}
+
+function updateSelBar() {
+    const bar = document.getElementById('selBar');
+    if (selectedIds.size > 0) { bar.classList.add('show'); document.getElementById('selCount').textContent = selectedIds.size + '개 선택'; }
+    else { bar.classList.remove('show'); }
+}
+
+// ═══════════════════════════════════════════════════════════
+// 네비게이션
+// ═══════════════════════════════════════════════════════════
+function navigate(folderId) { currentView = 'drive'; currentFolder = folderId; document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.view==='drive')); document.getElementById('driveActions').classList.remove('hidden'); document.getElementById('trashActions').classList.add('hidden'); loadView(); }
+
+function rowDblClick(id, isFolder, name) {
+    if (isFolder && currentView !== 'trash') navigate(id);
+    else if (!isFolder) openPreview(id);
+}
+
+// ═══════════════════════════════════════════════════════════
+// 즐겨찾기 토글
+// ═══════════════════════════════════════════════════════════
+async function toggleStar(id) {
+    const res = await fetch('/api/drive/star', { method:'POST', headers:{...AUTH,'Content-Type':'application/json'}, body:JSON.stringify({id}) });
+    const data = await res.json();
+    const f = currentFiles.find(x => x.id === id);
+    if (f) f.isStarred = data.starred;
+    renderFiles();
+    toast(data.starred ? '즐겨찾기 추가' : '즐겨찾기 해제', 'success');
+}
+
+// ═══════════════════════════════════════════════════════════
+// 내부 드래그 (파일 이동)
+// ═══════════════════════════════════════════════════════════
+function fileDragStart(e, id) { dragItemId = id; e.dataTransfer.setData('text/plain', id); e.dataTransfer.effectAllowed = 'move'; }
+function fileDragOver(e) { e.preventDefault(); e.currentTarget.classList.add('drag-over'); }
+function fileDragLeave(e) { e.currentTarget.classList.remove('drag-over'); }
+async function fileDrop(e, targetId) {
+    e.preventDefault(); e.stopPropagation();
+    e.currentTarget.classList.remove('drag-over');
+    if (e.dataTransfer.files.length > 0 && !dragItemId) { handleFileSelect(e.dataTransfer.files); return; }
+    if (!dragItemId || dragItemId === targetId) { dragItemId = null; return; }
+    const ids = selectedIds.has(dragItemId) && selectedIds.size > 1 ? [...selectedIds] : [dragItemId];
+    for (const mid of ids) { if (mid===targetId) continue; await fetch('/api/drive/move',{method:'POST',headers:{...AUTH,'Content-Type':'application/json'},body:JSON.stringify({id:mid,newParentId:targetId})}); }
+    dragItemId = null;
+    await loadView();
+    toast(ids.length > 1 ? ids.length+'개 이동 완료' : '이동 완료', 'success');
+}
+
+// 외부 파일 드래그
+let dragCnt = 0;
+document.addEventListener('dragenter', e => { e.preventDefault(); if(dragItemId) return; dragCnt++; document.getElementById('dropOverlay').classList.add('active'); });
+document.addEventListener('dragleave', e => { e.preventDefault(); if(dragItemId) return; dragCnt--; if(dragCnt<=0){dragCnt=0;document.getElementById('dropOverlay').classList.remove('active');} });
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('drop', async e => {
+    e.preventDefault(); dragCnt=0; document.getElementById('dropOverlay').classList.remove('active');
+    if(dragItemId){dragItemId=null;return;}
+    if (e.dataTransfer.items && e.dataTransfer.items.length) {
+        const entries = [];
+        for (const item of e.dataTransfer.items) { const en = item.webkitGetAsEntry && item.webkitGetAsEntry(); if(en) entries.push(en); }
+        if (entries.some(en => en.isDirectory)) { const all = await collectEntriesFiles(entries); if(all.length) await handleFolderDrop(all); return; }
+    }
+    if(e.dataTransfer.files.length) handleFileSelect(e.dataTransfer.files);
+});
+
+function readEntryFiles(entry, path) {
+    return new Promise(resolve => {
+        if (entry.isFile) { entry.file(f => resolve([{file:f, relativePath:path+f.name}]), () => resolve([])); }
+        else if (entry.isDirectory) {
+            const reader = entry.createReader(), results = [];
+            (function readAll() { reader.readEntries(async entries => { if(!entries.length){resolve(results);return;} for(const e of entries){const sub=await readEntryFiles(e,path+entry.name+'/');results.push(...sub);} readAll(); }, ()=>resolve(results)); })();
+        } else resolve([]);
+    });
+}
+async function collectEntriesFiles(entries) { const all=[]; for(const en of entries){all.push(...await readEntryFiles(en,''));} return all; }
+
+async function handleFolderDrop(items) {
+    const panel=document.getElementById('uploadPanel'), list=document.getElementById('uploadList');
+    panel.classList.remove('hidden');
+    if(list.children.length>0) list.insertAdjacentHTML('beforeend','<div class="border-t my-2" style="border-color:var(--bg3)"></div>');
+    const folderMap={}, dirPaths=new Set();
+    for(const item of items){const parts=item.relativePath.split('/');for(let i=1;i<parts.length;i++)dirPaths.add(parts.slice(0,i).join('/'));}
+    for(const dp of [...dirPaths].sort((a,b)=>a.split('/').length-b.split('/').length)){
+        const parts=dp.split('/'), name=parts.at(-1), pp=parts.slice(0,-1).join('/'), pid=pp?folderMap[pp]:currentFolder;
+        try{const r=await fetch('/api/drive/mkdir',{method:'POST',headers:{...AUTH,'Content-Type':'application/json'},body:JSON.stringify({name,parentId:pid})});const d=await r.json();folderMap[dp]=d.id;}catch{}
+    }
+    const q=items.map(item=>{const parts=item.relativePath.split('/'), dp=parts.slice(0,-1).join('/'); return{file:item.file,parentId:dp?(folderMap[dp]??currentFolder):currentFolder};});
+    let failed=0;const total=q.length;
+    _uploadActive+=total;
+    const batchBytes = q.reduce((s,it)=>s+it.file.size,0);
+    _uploadTotalBytes+=batchBytes;
+    if(!_uploadStartTime) _uploadStartTime=Date.now();
+    _updateUploadCount();
+    async function w(){while(q.length){const it=q.shift();try{await uploadOne(it.file,list,it.parentId);_uploadDone++;}catch(e){failed++;_uploadFail++;console.error('[Upload] 폴더 업로드 실패:',it.file.name,e);}_updateUploadCount();}}
+    const ws=[];for(let i=0;i<Math.min(3,total);i++)ws.push(w()); await Promise.all(ws);
+    if(failed===0) toast(total+'개 업로드 완료','success');
+    else toast((total-failed)+'개 완료, '+failed+'개 실패','warning');
+    if(_uploadDone+_uploadFail>=_uploadActive){
+        document.getElementById('uploadTotalBar').style.background='#22c55e';
+        document.getElementById('uploadPercent').textContent='100% 완료';
+        document.getElementById('uploadEta').textContent='';
+        setTimeout(()=>{ panel.classList.add('hidden');list.innerHTML=''; _resetUploadStats(); document.getElementById('uploadTotalBar').style.background='var(--accent)';document.getElementById('uploadTotalBar').style.width='0%'; }, 1500);
+    }
+    await loadView();await loadUsage();
+}
+
+// ═══════════════════════════════════════════════════════════
+// 업로드 (20MB 청크, 동시 3파일, 청크 2병렬)
+// ═══════════════════════════════════════════════════════════
+const CHUNK=20*1024*1024, MAX_PAR=3;
+// 전역 업로드 진행 추적
+let _uploadActive=0, _uploadDone=0, _uploadFail=0;
+let _quotaHit=false;   // 이번 업로드 중 용량(5GB) 초과로 거절된 파일이 있었는지
+let _storageHit=false; // 회원 저장소(HDD)가 빠져 있어 거절된 파일이 있었는지
+// 업로드 실패 상태 문구 — 413 용량 초과, 503 저장소 점검(HDD 분리), 429 동시 업로드 과다
+function upLabel(s){return s===413?'용량 초과':s===503?'저장소 점검 중':s===429?'잠시 후 다시':'실패';}
+let _uploadTotalBytes=0, _uploadSentBytes=0, _uploadStartTime=0;
+function _formatEta(sec){
+    if(!isFinite(sec)||sec<0) return '';
+    if(sec<60) return Math.ceil(sec)+'초 남음';
+    if(sec<3600) return Math.ceil(sec/60)+'분 남음';
+    return Math.floor(sec/3600)+'시간 '+Math.ceil((sec%3600)/60)+'분 남음';
+}
+function _updateUploadCount(){
+    // 파일 카운트
+    document.getElementById('uploadCount').textContent = (_uploadDone+_uploadFail)+'/'+_uploadActive + (_uploadFail?' (실패 '+_uploadFail+')':'');
+    // 퍼센트 + 전체 진행 바
+    const pct = _uploadTotalBytes>0 ? Math.min(_uploadSentBytes/_uploadTotalBytes*100,100) : 0;
+    document.getElementById('uploadTotalBar').style.width = pct+'%';
+    document.getElementById('uploadPercent').textContent = pct.toFixed(1)+'%  ·  '+formatSize(_uploadSentBytes)+' / '+formatSize(_uploadTotalBytes);
+    // 남은 시간 계산 (전송 속도 기반)
+    const elapsed = (Date.now()-_uploadStartTime)/1000;
+    if(elapsed>1 && _uploadSentBytes>0){
+        const speed = _uploadSentBytes/elapsed;
+        const remaining = (_uploadTotalBytes-_uploadSentBytes)/speed;
+        document.getElementById('uploadEta').textContent = _formatEta(remaining) + '  ·  ' + formatSize(speed)+'/s';
+    } else {
+        document.getElementById('uploadEta').textContent = '계산 중...';
+    }
+}
+function _resetUploadStats(){ _quotaHit=false;_storageHit=false; _uploadActive=0;_uploadDone=0;_uploadFail=0;_uploadTotalBytes=0;_uploadSentBytes=0;_uploadStartTime=0; }
+// 업로드 중 새로고침/탭닫기 방지
+window.addEventListener('beforeunload', e=>{
+    if(_uploadActive>0 && (_uploadDone+_uploadFail)<_uploadActive){
+        e.preventDefault();
+        e.returnValue='';
+    }
+});
+
+async function handleFileSelect(files) {
+    if(!files||!files.length) return;
+    dupApplyAllMode = null; // 모두 적용 모드 초기화
+    const panel=document.getElementById('uploadPanel'), list=document.getElementById('uploadList');
+    panel.classList.remove('hidden');
+    // 이전 업로드 항목 유지, 새 배치 구분선 추가
+    if(list.children.length>0) list.insertAdjacentHTML('beforeend','<div class="border-t my-2" style="border-color:var(--bg3)"></div>');
+    const hasRelPath=files[0]&&files[0].webkitRelativePath;
+    const realFiles=[...files].filter(f=>f.size>0||f.name!=='.');
+    const folderMap={};
+    if(hasRelPath){
+        const dirPaths=new Set();
+        for(const f of realFiles){const parts=f.webkitRelativePath.split('/');for(let i=1;i<parts.length;i++)dirPaths.add(parts.slice(0,i).join('/'));}
+        for(const dp of [...dirPaths].sort((a,b)=>a.split('/').length-b.split('/').length)){
+            const parts=dp.split('/'),name=parts.at(-1),pp=parts.slice(0,-1).join('/'),pid=pp?folderMap[pp]:currentFolder;
+            try{const r=await fetch('/api/drive/mkdir',{method:'POST',headers:{...AUTH,'Content-Type':'application/json'},body:JSON.stringify({name,parentId:pid})});const d=await r.json();folderMap[dp]=d.id;}catch{}
+        }
+    }
+    const q=realFiles.map(f=>{let pid=currentFolder;if(hasRelPath&&f.webkitRelativePath){const parts=f.webkitRelativePath.split('/');if(parts.length>1){const dp=parts.slice(0,-1).join('/');pid=folderMap[dp]??currentFolder;}}return{file:f,parentId:pid};});
+    // 순차 업로드 (중복 체크 모달이 동기적이므로 병렬 X)
+    let uploaded=0, failed=0; const total=q.length;
+    _uploadActive+=total;
+    const batchBytes = q.reduce((s,it)=>s+it.file.size,0);
+    _uploadTotalBytes+=batchBytes;
+    if(!_uploadStartTime) _uploadStartTime=Date.now();
+    _updateUploadCount();
+    for (const it of q) {
+        // 중복 체크 — 서버 에러 시 건너뛰지 않고 바로 업로드
+        let dupData = { exists: false };
+        try {
+            const dupRes = await fetch(`/api/drive/check-dup?name=${encodeURIComponent(it.file.name)}&parentId=${it.parentId||''}`, {headers:AUTH});
+            if (dupRes.ok) dupData = await dupRes.json();
+            else console.error('[DriveAPI] check-dup 실패:', dupRes.status, await dupRes.text().catch(()=>''));
+        } catch(e) { console.error('[DriveAPI] check-dup 에러:', e); }
+        let mode = '';
+        if (dupData.exists) {
+            if (dupApplyAllMode) {
+                mode = dupApplyAllMode;
+            } else {
+                mode = await showDupModal(it.file.name);
+            }
+            if (mode === 'skip') continue;
+        }
+        try {
+            await uploadOne(it.file, list, it.parentId, mode);
+            uploaded++; _uploadDone++;
+        } catch(e) {
+            failed++; _uploadFail++;
+            console.error('[Upload] 파일 업로드 실패:', it.file.name, e);
+        }
+        _updateUploadCount();
+    }
+    document.getElementById('fileInput').value=''; document.getElementById('folderInput').value='';
+    if (uploaded > 0 && failed === 0) toast(uploaded + '개 업로드 완료', 'success');
+    else if (uploaded > 0) toast(uploaded + '개 완료, ' + failed + '개 실패', 'warning');
+    else if (failed > 0) toast(failed + '개 업로드 실패', 'error');
+    if (_quotaHit) toast('드라이브 용량(5GB)이 부족해 일부 파일을 올리지 못했습니다. 휴지통도 용량에 포함됩니다.', 'error');
+    if (_storageHit) toast('회원 저장소 점검 중이라 올리지 못했습니다. 잠시 후 다시 시도해 주세요.', 'error');
+    // 모든 배치 완료 시 패널 닫고 파일 목록 즉시 새로고침
+    if(_uploadDone+_uploadFail>=_uploadActive){
+        // 완료 상태 표시
+        document.getElementById('uploadTotalBar').style.background='#22c55e';
+        document.getElementById('uploadPercent').textContent='100% 완료';
+        document.getElementById('uploadEta').textContent='';
+        setTimeout(()=>{ panel.classList.add('hidden');list.innerHTML=''; _resetUploadStats(); document.getElementById('uploadTotalBar').style.background='var(--accent)';document.getElementById('uploadTotalBar').style.width='0%'; }, 1500);
+    }
+    await loadView(); await loadUsage();
+}
+
+// 중복 파일 모달 표시 — Promise로 사용자 선택 대기
+function showDupModal(fileName) {
+    return new Promise(resolve => {
+        document.getElementById('dupFileName').textContent = '"' + fileName + '"';
+        document.getElementById('dupApplyAll').checked = false;
+        document.getElementById('dupModal').classList.add('show');
+        dupResolveCallback = resolve;
+    });
+}
+function dupResolve(mode) {
+    const applyAll = document.getElementById('dupApplyAll').checked;
+    if (applyAll) dupApplyAllMode = mode;
+    document.getElementById('dupModal').classList.remove('show');
+    if (dupResolveCallback) { dupResolveCallback(mode); dupResolveCallback = null; }
+}
+
+async function uploadOne(file, listEl, parentId, mode) {
+    if(parentId===undefined||parentId===null)parentId=currentFolder;
+    const dn=file.webkitRelativePath||file.name;
+    const fSize=file.size;
+    const uid='u'+Date.now()+Math.random().toString(36).slice(2,6);
+    listEl.insertAdjacentHTML('beforeend',`<div id="${uid}" class="flex items-center gap-2"><div class="flex-1 min-w-0"><div class="text-xs truncate" style="color:var(--fg2)">${escapeHtml(dn)}</div><div class="w-full rounded-full h-1 mt-1" style="background:var(--bg3)"><div class="progress-bar h-1 rounded-full" style="background:var(--accent);width:0%"></div></div></div><span class="text-[10px] shrink-0 upload-status" style="color:var(--fg3)">${formatSize(fSize)}</span></div>`);
+    listEl.scrollTop = listEl.scrollHeight;
+    const row=document.getElementById(uid);
+    const bar=row.querySelector('.progress-bar');
+    const statusEl=row.querySelector('.upload-status');
+    // 이 파일에서 이전에 보고한 바이트 (중복 집계 방지)
+    let prevReported=0;
+    function trackBytes(sent){
+        const delta=sent-prevReported;
+        if(delta>0){_uploadSentBytes+=delta; prevReported=sent;}
+        _updateUploadCount();
+    }
+    const chunks=Math.ceil(fSize/CHUNK);
+    // 단일 청크 업로드 (파일 크기에 비례한 타임아웃, 최소 60초)
+    if(chunks<=1){
+        const fd=new FormData();fd.append('file',file);
+        if(parentId)fd.append('parentId',parentId);
+        if(mode)fd.append('mode',mode);
+        const timeout=Math.max(60000, fSize/50000*1000);
+        // 업로드 성공/실패를 Promise resolve/reject로 구분
+        await new Promise((ok, fail)=>{
+            const x=new XMLHttpRequest();
+            x.timeout=timeout;
+            x.open('POST','/api/drive/upload');
+            x.setRequestHeader('Authorization','Bearer '+TOKEN);
+            x.upload.onprogress=e=>{
+                if(e.lengthComputable){
+                    bar.style.width=(e.loaded/e.total*100)+'%';
+                    trackBytes(e.loaded);
+                }
+            };
+            x.onload=()=>{
+                if(x.status>=200&&x.status<300){bar.style.width='100%';bar.style.background='#22c55e';statusEl.textContent='완료';trackBytes(fSize);ok();}
+                else{if(x.status===413)_quotaHit=true;if(x.status===503)_storageHit=true;bar.style.background='#ef4444';statusEl.textContent=upLabel(x.status);statusEl.style.color='#ef4444';trackBytes(fSize);fail(new Error('upload failed'));}
+            };
+            x.onerror=()=>{bar.style.background='#ef4444';statusEl.textContent='실패';statusEl.style.color='#ef4444';trackBytes(fSize);fail(new Error('network error'));};
+            x.ontimeout=()=>{bar.style.background='#ef4444';statusEl.textContent='시간초과';statusEl.style.color='#ef4444';trackBytes(fSize);fail(new Error('timeout'));};
+            x.send(fd);
+        });
+        listEl.scrollTop = listEl.scrollHeight;
+        return;
+    }
+    // 청크 업로드 (대용량 파일)
+    const sr=await fetch('/api/drive/upload/start',{method:'POST',headers:{...AUTH,'Content-Type':'application/json'},body:JSON.stringify({fileName:file.name,fileSize:fSize,totalChunks:chunks,chunkSize:CHUNK,parentId,mode:mode||''})});
+    if(!sr.ok){if(sr.status===413)_quotaHit=true;if(sr.status===503)_storageHit=true;bar.style.background='#ef4444';statusEl.textContent=upLabel(sr.status);statusEl.style.color='#ef4444';trackBytes(fSize);throw new Error('start failed');}
+    const{uploadId}=await sr.json();let next=0;let chunkFail=false;
+    async function cw(){
+        while(next<chunks&&!chunkFail){
+            const i=next++;const s=i*CHUNK;const fd=new FormData();
+            fd.append('chunk',file.slice(s,s+CHUNK));fd.append('uploadId',uploadId);fd.append('chunkIndex',i);
+            try{
+                const r=await fetch('/api/drive/upload/chunk',{method:'POST',headers:AUTH,body:fd});
+                if(!r.ok)chunkFail=true;
+            }catch{chunkFail=true;}
+            const sent=Math.min((i+1)*CHUNK, fSize);
+            bar.style.width=(sent/fSize*100)+'%';
+            trackBytes(sent);
+        }
+    }
+    await Promise.all([cw(),cw()]);
+    if(chunkFail){bar.style.background='#ef4444';statusEl.textContent='실패';statusEl.style.color='#ef4444';trackBytes(fSize);listEl.scrollTop=listEl.scrollHeight;throw new Error('chunk upload failed');}
+    const cr=await fetch('/api/drive/upload/complete',{method:'POST',headers:{...AUTH,'Content-Type':'application/json'},body:JSON.stringify({uploadId})});
+    if(cr.ok){bar.style.width='100%';bar.style.background='#22c55e';statusEl.textContent='완료';}
+    else{if(cr.status===413)_quotaHit=true;if(cr.status===503)_storageHit=true;bar.style.background='#ef4444';statusEl.textContent=upLabel(cr.status);statusEl.style.color='#ef4444';trackBytes(fSize);throw new Error('complete failed');}
+    trackBytes(fSize);
+    listEl.scrollTop = listEl.scrollHeight;
+}
+
+// ═══════════════════════════════════════════════════════════
+// 다운로드
+// ═══════════════════════════════════════════════════════════
+function downloadFile(id, name) { const a=document.createElement('a');a.href='/api/drive/download/'+id+'?token='+TOKEN;a.download=name;a.click(); }
+
+// ═══════════════════════════════════════════════════════════
+// 일괄 작업
+// ═══════════════════════════════════════════════════════════
+function bulkDownload(){currentFiles.filter(f=>selectedIds.has(f.id)&&!f.isFolder).forEach(f=>downloadFile(f.id,f.fileName));}
+
+async function bulkDelete() {
+    if(!selectedIds.size) return;
+    if(!confirm(selectedIds.size+'개 항목을 삭제하시겠습니까?')) return;
+    if(currentView==='trash'){for(const id of selectedIds)await fetch('/api/drive/delete/'+id,{method:'DELETE',headers:AUTH});}
+    else{for(const id of selectedIds)await fetch('/api/drive/trash/'+id,{method:'POST',headers:AUTH});}
+    toast(selectedIds.size+'개 삭제','success');
+    await loadView();await loadUsage();
+}
+
+function bulkMove() { moveItemIds=[...selectedIds]; showMoveModal(); }
+
+// ═══════════════════════════════════════════════════════════
+// 미리보기
+// ═══════════════════════════════════════════════════════════
+function openPreview(id) {
+    previewFile = currentFiles.find(f => f.id === id);
+    if (!previewFile || previewFile.isFolder) return;
+    const modal = document.getElementById('previewModal');
+    const content = document.getElementById('previewContent');
+    const pName = document.getElementById('previewName');
+    const url = `/api/drive/download/${id}?token=${TOKEN}&inline=1`;
+    const ext = (previewFile.fileName.split('.').pop()||'').toLowerCase();
+    const knownImg = /^(jpg|jpeg|png|gif|webp|svg|bmp|ico|tiff)$/.test(ext);
+    const knownVid = /^(mp4|webm|mov|avi|mkv|wmv|flv)$/.test(ext);
+    const knownAud = /^(mp3|wav|ogg|flac|aac|m4a|wma)$/.test(ext);
+
+    pName.textContent = previewFile.fileName;
+
+    if (knownImg) {
+        content.innerHTML = `<img src="${url}" class="max-w-full max-h-[80vh] mx-auto rounded-lg" />`;
+    } else if (knownVid) {
+        content.innerHTML = `<video src="${url}" controls autoplay class="max-w-full max-h-[80vh] mx-auto rounded-lg"></video>`;
+    } else if (knownAud) {
+        content.innerHTML = `<div class="text-center py-16"><i data-lucide="music" class="w-16 h-16 text-pink-400 mx-auto mb-4"></i><p class="text-lg mb-4">${escapeHtml(previewFile.fileName)}</p><audio src="${url}" controls autoplay class="mx-auto"></audio></div>`;
+    } else if (ext === 'pdf') {
+        content.innerHTML = `<iframe src="${url}" class="w-full rounded-lg" style="height:80vh" frameborder="0"></iframe>`;
+    } else if (isTextFile(previewFile.fileName)) {
+        content.innerHTML = '<div class="text-center py-8"><span class="text-sm" style="color:var(--fg3)">로딩 중...</span></div>';
+        fetch(url, {headers:AUTH}).then(r=>r.text()).then(txt=>{
+            content.innerHTML = `<pre class="p-4 rounded-xl text-sm overflow-auto max-h-[80vh] whitespace-pre-wrap break-all" style="background:rgba(0,0,0,.5); color:#e2e8f0; font-family:monospace">${escapeHtml(txt)}</pre>`;
+        });
+    } else {
+        // 확장자를 모르는 경우: 미디어로 시도 (이미지 → 비디오 → 오디오 → 다운로드 폴백)
+        content.innerHTML = '<div class="text-center py-8"><span class="text-sm" style="color:var(--fg3)">파일 분석 중...</span></div>';
+        tryMediaPreview(url, content);
+    }
+    modal.classList.add('show');
+    lucide.createIcons();
+}
+
+// 확장자 미상 파일: 이미지→비디오→오디오 순으로 로드 시도
+function tryMediaPreview(url, container) {
+    // 1) 이미지 시도
+    const img = new Image();
+    img.onload = () => {
+        container.innerHTML = '';
+        img.className = 'max-w-full max-h-[80vh] mx-auto rounded-lg';
+        container.appendChild(img);
+    };
+    img.onerror = () => {
+        // 2) 비디오 시도
+        const vid = document.createElement('video');
+        vid.src = url; vid.controls = true; vid.autoplay = true;
+        vid.className = 'max-w-full max-h-[80vh] mx-auto rounded-lg';
+        let vidLoaded = false;
+        vid.onloadeddata = () => { vidLoaded = true; container.innerHTML = ''; container.appendChild(vid); };
+        vid.onerror = () => {
+            if (vidLoaded) return;
+            // 3) 오디오 시도
+            const aud = document.createElement('audio');
+            aud.src = url; aud.controls = true; aud.autoplay = true;
+            aud.className = 'mx-auto';
+            aud.onloadeddata = () => {
+                container.innerHTML = `<div class="text-center py-16"><p class="text-lg mb-4">${escapeHtml(previewFile.fileName)}</p></div>`;
+                container.querySelector('div').appendChild(aud);
+            };
+            aud.onerror = () => {
+                // 모든 시도 실패 → 다운로드 버튼
+                container.innerHTML = `<div class="text-center py-16"><i data-lucide="file" class="w-16 h-16 mx-auto mb-4" style="color:var(--fg3)"></i><p class="text-lg mb-2">${escapeHtml(previewFile.fileName)}</p><p class="text-sm mb-6" style="color:var(--fg3)">${formatSize(previewFile.fileSize)}</p><button onclick="previewDownload()" class="px-6 py-2 rounded-xl text-white font-medium" style="background:var(--accent)">다운로드</button></div>`;
+                lucide.createIcons();
+            };
+        };
+        // 비디오는 타임아웃으로도 판단
+        setTimeout(() => { if (!vidLoaded) vid.dispatchEvent(new Event('error')); }, 3000);
+    };
+    img.src = url;
+}
+function closePreview() { document.getElementById('previewModal').classList.remove('show'); document.getElementById('previewContent').innerHTML=''; }
+function previewDownload() { if(previewFile) downloadFile(previewFile.id, previewFile.fileName); }
+
+// ═══════════════════════════════════════════════════════════
+// 상세 패널
+// ═══════════════════════════════════════════════════════════
+function showDetail(id) {
+    detailFile = currentFiles.find(f => f.id === id);
+    if (!detailFile) return;
+    const c = document.getElementById('detailContent');
+    const icon = detailFile.isFolder ? 'folder' : getFileIcon(detailFile.fileName);
+    const clr = detailFile.isFolder ? 'color:#fbbf24' : getFileIconColor(detailFile.fileName);
+    const isImg = isImageFile(detailFile.fileName);
+
+    c.innerHTML = `
+        <div class="flex flex-col items-center mb-6">
+            ${isImg ? `<img src="/api/drive/download/${detailFile.id}?token=${TOKEN}&inline=1" class="w-full h-40 object-cover rounded-xl mb-3" />` :
+              `<div class="w-20 h-20 rounded-2xl flex items-center justify-center mb-3" style="background:var(--bg2)"><i data-lucide="${icon}" class="w-10 h-10" style="${clr}"></i></div>`}
+            <p class="text-sm font-medium text-center break-all">${escapeHtml(detailFile.fileName)}</p>
+        </div>
+        <div class="space-y-3 text-xs">
+            <div class="flex justify-between"><span style="color:var(--fg3)">종류</span><span>${detailFile.isFolder?'폴더':getExtLabel(detailFile.fileName)}</span></div>
+            ${!detailFile.isFolder?`<div class="flex justify-between"><span style="color:var(--fg3)">크기</span><span>${formatSize(detailFile.fileSize)}</span></div>`:''}
+            <div class="flex justify-between"><span style="color:var(--fg3)">수정일</span><span>${formatDateFull(detailFile.updatedAt)}</span></div>
+            <div class="flex justify-between"><span style="color:var(--fg3)">생성일</span><span>${formatDateFull(detailFile.createdAt)}</span></div>
+            <div class="flex justify-between"><span style="color:var(--fg3)">즐겨찾기</span><span>${detailFile.isStarred?'예':'아니오'}</span></div>
+        </div>`;
+    document.getElementById('detailPanel').classList.add('show');
+    lucide.createIcons();
+}
+function closeDetail() { document.getElementById('detailPanel').classList.remove('show'); }
+
+// ═══════════════════════════════════════════════════════════
+// 폴더 생성
+// ═══════════════════════════════════════════════════════════
+function showNewFolderModal(){document.getElementById('folderModal').classList.add('show');const i=document.getElementById('folderNameInput');i.value='';setTimeout(()=>i.focus(),100);}
+function closeFolderModal(){document.getElementById('folderModal').classList.remove('show');}
+async function createFolder(){const name=document.getElementById('folderNameInput').value.trim();if(!name)return;await fetch('/api/drive/mkdir',{method:'POST',headers:{...AUTH,'Content-Type':'application/json'},body:JSON.stringify({name,parentId:currentFolder})});closeFolderModal();await loadView();toast('폴더 생성 완료','success');}
+
+// ═══════════════════════════════════════════════════════════
+// 컨텍스트 메뉴
+// ═══════════════════════════════════════════════════════════
+function showCtxMenu(e, id) {
+    e.preventDefault();e.stopPropagation();
+    ctxTarget=currentFiles.find(f=>f.id===id);
+    const m=document.getElementById('ctxMenu');
+    document.getElementById('ctxStarLabel').textContent=ctxTarget&&ctxTarget.isStarred?'즐겨찾기 해제':'즐겨찾기';
+    m.style.left=Math.min(e.clientX,window.innerWidth-220)+'px';
+    m.style.top=Math.min(e.clientY,window.innerHeight-300)+'px';
+    m.classList.add('show');
+}
+function showTrashCtx(e, id) {
+    e.preventDefault();e.stopPropagation();
+    ctxTarget=currentFiles.find(f=>f.id===id);
+    const m=document.getElementById('trashCtxMenu');
+    m.style.left=Math.min(e.clientX,window.innerWidth-200)+'px';
+    m.style.top=Math.min(e.clientY,window.innerHeight-120)+'px';
+    m.classList.add('show');
+}
+document.addEventListener('click',()=>{document.getElementById('ctxMenu').classList.remove('show');document.getElementById('trashCtxMenu').classList.remove('show');});
+
+function ctxPreview(){if(ctxTarget&&!ctxTarget.isFolder)openPreview(ctxTarget.id);}
+function ctxDownload(){if(ctxTarget&&!ctxTarget.isFolder)downloadFile(ctxTarget.id,ctxTarget.fileName);}
+function ctxStar(){if(ctxTarget)toggleStar(ctxTarget.id);}
+async function ctxCopy(){if(!ctxTarget||ctxTarget.isFolder)return;await fetch('/api/drive/copy',{method:'POST',headers:{...AUTH,'Content-Type':'application/json'},body:JSON.stringify({id:ctxTarget.id})});await loadView();await loadUsage();toast('복사 완료','success');}
+function ctxRename(){if(!ctxTarget)return;document.getElementById('renameModal').classList.add('show');const i=document.getElementById('renameInput');i.value=ctxTarget.fileName;setTimeout(()=>{i.focus();i.select();},100);}
+function ctxMove(){if(!ctxTarget)return;moveItemIds=[ctxTarget.id];showMoveModal();}
+function ctxDetail(){if(ctxTarget)showDetail(ctxTarget.id);}
+async function ctxDelete(){if(!ctxTarget)return;if(!confirm('"'+ctxTarget.fileName+'" 삭제?'))return;await fetch('/api/drive/trash/'+ctxTarget.id,{method:'POST',headers:AUTH});await loadView();await loadUsage();toast('휴지통으로 이동','success');}
+
+// 휴지통 컨텍스트
+async function ctxRestore(){if(!ctxTarget)return;await fetch('/api/drive/restore/'+ctxTarget.id,{method:'POST',headers:AUTH});await loadView();toast('복원 완료','success');}
+async function ctxPermDelete(){if(!ctxTarget)return;if(!confirm('영구 삭제?'))return;await fetch('/api/drive/delete/'+ctxTarget.id,{method:'DELETE',headers:AUTH});await loadView();await loadUsage();toast('영구 삭제','success');}
+
+// ═══════════════════════════════════════════════════════════
+// 이름 변경
+// ═══════════════════════════════════════════════════════════
+function closeRenameModal(){document.getElementById('renameModal').classList.remove('show');}
+async function doRename(){if(!ctxTarget)return;const n=document.getElementById('renameInput').value.trim();if(!n)return;await fetch('/api/drive/rename',{method:'POST',headers:{...AUTH,'Content-Type':'application/json'},body:JSON.stringify({id:ctxTarget.id,newName:n})});closeRenameModal();await loadView();toast('이름 변경 완료','success');}
+
+// ═══════════════════════════════════════════════════════════
+// 이동 모달
+// ═══════════════════════════════════════════════════════════
+function showMoveModal(){
+    moveTargetId=undefined;
+    const folders=currentFiles.filter(f=>f.isFolder&&!moveItemIds.includes(f.id));
+    let h=`<div class="flex items-center gap-2 p-2 rounded-lg cursor-pointer border border-transparent" style="color:var(--fg2)" onclick="selectMoveTarget(null,this)"><i data-lucide="hard-drive" class="w-4 h-4"></i><span class="text-sm">내 드라이브 (루트)</span></div>`;
+    folders.forEach(f=>{h+=`<div class="flex items-center gap-2 p-2 rounded-lg cursor-pointer border border-transparent" style="color:var(--fg2)" onclick="selectMoveTarget(${f.id},this)"><i data-lucide="folder" class="w-4 h-4" style="color:#fbbf24"></i><span class="text-sm">${escapeHtml(f.fileName)}</span></div>`;});
+    document.getElementById('moveFolderList').innerHTML=h;lucide.createIcons();
+    document.getElementById('moveModal').classList.add('show');
+}
+function closeMoveModal(){document.getElementById('moveModal').classList.remove('show');}
+function selectMoveTarget(id,el){
+    moveTargetId=id;
+    document.querySelectorAll('#moveFolderList>div').forEach(d=>{d.style.background='transparent';d.style.borderColor='transparent';});
+    el.style.background='color-mix(in srgb,var(--accent) 15%,transparent)';el.style.borderColor='color-mix(in srgb,var(--accent) 30%,transparent)';
+}
+async function doMove(){
+    if(moveTargetId===undefined)return;
+    for(const id of moveItemIds)await fetch('/api/drive/move',{method:'POST',headers:{...AUTH,'Content-Type':'application/json'},body:JSON.stringify({id,newParentId:moveTargetId})});
+    closeMoveModal();await loadView();toast(moveItemIds.length>1?moveItemIds.length+'개 이동 완료':'이동 완료','success');
+}
+
+// ═══════════════════════════════════════════════════════════
+// 휴지통
+// ═══════════════════════════════════════════════════════════
+async function emptyTrash(){if(!confirm('휴지통을 비우시겠습니까? 모든 항목이 영구 삭제됩니다.'))return;await fetch('/api/drive/trash/empty',{method:'DELETE',headers:AUTH});await loadView();await loadUsage();toast('휴지통 비움','success');}
+
+// ═══════════════════════════════════════════════════════════
+// 키보드 단축키
+// ═══════════════════════════════════════════════════════════
+document.addEventListener('keydown', e => {
+    // 모달이나 인풋 포커스 시 무시
+    if (['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)) return;
+    if (e.key === 'a' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); currentFiles.forEach(f => selectedIds.add(f.id)); refreshSelectionUI(); }
+    if (e.key === 'Delete' && selectedIds.size) { bulkDelete(); }
+    if (e.key === 'Escape') { closePreview(); closeFolderModal(); closeRenameModal(); closeMoveModal(); clearSelection(); closeDetail(); }
+    if (e.key === 'Enter' && selectedIds.size === 1) {
+        const id = [...selectedIds][0]; const f = currentFiles.find(x => x.id === id);
+        if (f) { if (f.isFolder) navigate(f.id); else openPreview(f.id); }
+    }
+    if (e.key === 'Backspace' && currentView === 'drive') {
+        // 브레드크럼에서 뒤로 가기
+        const nav = document.getElementById('breadcrumb');
+        const btns = nav.querySelectorAll('button');
+        if (btns.length > 1) btns[btns.length - 2].click();
+        else if (currentFolder) navigate(null);
+    }
+});
+
+// ═══════════════════════════════════════════════════════════
+// 사이드바 토글 (모바일)
+// ═══════════════════════════════════════════════════════════
+function toggleSidebar() {
+    const sb = document.getElementById('sidebar'), ov = document.getElementById('sidebarOverlay');
+    const isOpen = sb.classList.contains('flex') && !sb.classList.contains('hidden');
+    if (window.innerWidth < 1024) {
+        if (sb.classList.contains('hidden') || !sb.classList.contains('fixed')) {
+            sb.classList.remove('hidden');
+            sb.classList.add('fixed','inset-y-0','left-0','z-50');
+            sb.style.background = 'var(--bg)';
+            ov.classList.remove('hidden');
+        } else {
+            sb.classList.add('hidden');
+            sb.classList.remove('fixed','inset-y-0','left-0','z-50');
+            ov.classList.add('hidden');
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════
+// 로그아웃 / 사용량
+// ═══════════════════════════════════════════════════════════
+// 통합 계정: 드라이브 토큰 + 사이트 로그인까지 함께 끝냄 (안 그러면 /drive에서 바로 다시 들어옴)
+async function logout(){await fetch('/api/drive/logout',{method:'POST',headers:AUTH});await fetch('/api/astera/logout',{method:'POST',credentials:'same-origin'});localStorage.removeItem('driveToken');location.href='/';}
+async function loadUsage(){
+    try {
+        const res=await fetch('/api/drive/usage',{headers:AUTH});
+        if(!res.ok){ document.getElementById('usageText').textContent='연결 오류'; return; }
+        const d=await res.json();
+        // 회원: 5GB 한도 대비(휴지통 포함) / 관리자(quota=null): SSD 전체 대비
+        const used=d.quota!=null?(d.quotaUsed||0):(d.usage||0), total=d.quota!=null?d.quota:(d.total||0);
+        if(total<=0){ document.getElementById('usageText').textContent='용량 정보 없음'; return; }
+        const pct=Math.min(used/total*100,100);
+        const bar=document.getElementById('usageBar');
+        bar.style.width=Math.max(pct,0.5)+'%';
+        bar.style.background=pct>80?'#ef4444':pct>60?'#f59e0b':'var(--accent)';
+        document.getElementById('usageText').textContent=formatSize(used)+' / '+formatSize(total);
+    } catch(e) { document.getElementById('usageText').textContent='연결 오류'; }
+}
+
+// 엔터 키 이벤트
+document.getElementById('folderNameInput').addEventListener('keydown',e=>{if(e.key==='Enter')createFolder();});
+document.getElementById('renameInput').addEventListener('keydown',e=>{if(e.key==='Enter')doRename();});
+
+// ═══════════════════════════════════════════════════════════
+// 유틸리티
+// ═══════════════════════════════════════════════════════════
+function formatSize(b){if(!b||b===0)return '0 B';const u=['B','KB','MB','GB','TB'];const i=Math.floor(Math.log(b)/Math.log(1024));return(b/Math.pow(1024,i)).toFixed(i===0?0:1)+' '+u[i];}
+
+function formatDate(iso){if(!iso)return '—';const d=new Date(iso);if(isNaN(d))return '—';const now=new Date(),diff=now-d;if(diff<60000)return '방금 전';if(diff<3600000)return Math.floor(diff/60000)+'분 전';const t=d.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});if(d.toDateString()===now.toDateString())return '오늘 '+t;const y=new Date(now);y.setDate(y.getDate()-1);if(d.toDateString()===y.toDateString())return '어제 '+t;if(d.getFullYear()===now.getFullYear())return(d.getMonth()+1)+'월 '+d.getDate()+'일';return d.getFullYear()+'.'+(d.getMonth()+1)+'.'+d.getDate();}
+
+function formatDateFull(iso){if(!iso)return '—';const d=new Date(iso);if(isNaN(d))return '—';return d.getFullYear()+'.'+(d.getMonth()+1).toString().padStart(2,'0')+'.'+d.getDate().toString().padStart(2,'0')+' '+d.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});}
+
+function getFileIcon(name){const ext=(name.split('.').pop()||'').toLowerCase();return{pdf:'file-text',doc:'file-text',docx:'file-text',txt:'file-text',hwp:'file-text',hwpx:'file-text',rtf:'file-text',md:'file-text',jpg:'image',jpeg:'image',png:'image',gif:'image',webp:'image',svg:'image',bmp:'image',ico:'image',tiff:'image',mp4:'video',avi:'video',mkv:'video',mov:'video',wmv:'video',flv:'video',webm:'video',mp3:'music',wav:'music',flac:'music',aac:'music',ogg:'music',wma:'music',m4a:'music',zip:'file-archive',rar:'file-archive','7z':'file-archive',tar:'file-archive',gz:'file-archive',js:'file-code',ts:'file-code',py:'file-code',cs:'file-code',java:'file-code',html:'file-code',css:'file-code',cpp:'file-code',c:'file-code',go:'file-code',rs:'file-code',php:'file-code',rb:'file-code',json:'file-json',xml:'file-code',yml:'file-code',yaml:'file-code',sql:'database',sh:'terminal',xlsx:'sheet',xls:'sheet',csv:'sheet',pptx:'presentation',ppt:'presentation',exe:'settings',msi:'settings',apk:'smartphone',dmg:'settings',ttf:'type',otf:'type',woff:'type',woff2:'type',iso:'disc',torrent:'download'}[ext]||'file';}
+
+function getFileIconColor(name){const ext=(name.split('.').pop()||'').toLowerCase();return{pdf:'color:#f87171',doc:'color:#60a5fa',docx:'color:#60a5fa',hwp:'color:#38bdf8',hwpx:'color:#38bdf8',txt:'color:var(--fg3)',jpg:'color:#34d399',jpeg:'color:#34d399',png:'color:#34d399',gif:'color:#34d399',webp:'color:#34d399',svg:'color:#34d399',bmp:'color:#34d399',mp4:'color:#a78bfa',avi:'color:#a78bfa',mkv:'color:#a78bfa',mov:'color:#a78bfa',wmv:'color:#a78bfa',webm:'color:#a78bfa',mp3:'color:#f472b6',wav:'color:#f472b6',flac:'color:#f472b6',aac:'color:#f472b6',ogg:'color:#f472b6',m4a:'color:#f472b6',zip:'color:#facc15',rar:'color:#facc15','7z':'color:#facc15',tar:'color:#facc15',gz:'color:#facc15',js:'color:#fde047',ts:'color:#60a5fa',py:'color:#4ade80',cs:'color:#a78bfa',java:'color:#fb923c',html:'color:#fb923c',css:'color:#60a5fa',json:'color:#fde047',sql:'color:#22d3ee',xlsx:'color:#22c55e',xls:'color:#22c55e',csv:'color:#22c55e',pptx:'color:#f97316',ppt:'color:#f97316',exe:'color:var(--fg3)',apk:'color:#4ade80'}[ext]||'color:var(--accent2)';}
+
+function getExtLabel(name){const ext=(name.split('.').pop()||'').toUpperCase();return ext?ext+' 파일':'파일';}
+
+function isImageFile(name){return/\.(jpg|jpeg|png|gif|webp|svg|bmp|ico|tiff)$/i.test(name);}
+function isTextFile(name){return/\.(txt|md|json|js|ts|tsx|jsx|py|cs|java|go|rs|rb|php|sh|yml|yaml|xml|sql|css|html|htm|csv|log|cfg|ini|toml|env|bat|ps1|c|cpp|h|hpp)$/i.test(name);}
+
+function escapeHtml(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+function esc(s){return s.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');}
+
+function toast(msg,type){const c=document.getElementById('toasts'),el=document.createElement('div');el.className='toast '+(type||'');el.textContent=msg;c.appendChild(el);setTimeout(()=>{el.style.opacity='0';el.style.transition='opacity .3s';setTimeout(()=>el.remove(),300);},3000);}
+</script>
+</body>
+</html>
